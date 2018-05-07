@@ -1,0 +1,8 @@
+{
+  "name": "freemoney",
+  "version": "0.1.0",
+  "scripts": {
+  	"test": "truffle test",
+  	"cover": "./node_modules/.bin/solidity-coverage"
+  }
+}

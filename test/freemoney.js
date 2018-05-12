@@ -33,7 +33,7 @@ const increaseTime = function(duration) {
 contract('FreeMoney', async function(accounts) {
   describe('constructor', function() {
     it('creates correct initialSupply', async function() {
-      const instance = await FreeMoney.new(10000);
+      const instance = await FreeMoney.new(10000, 10000);
       const balance = await instance.balanceOf(accounts[0]);
 
       assert.equal(provider.utils.fromWei(numberToBn(balance), 'ether'), 10000, 'initialSupply was incorrect');
@@ -42,7 +42,7 @@ contract('FreeMoney', async function(accounts) {
 
   describe('transfer', function() {
     it('fails to transfer to 0x0', async function() {
-      const instance = await FreeMoney.new(10000);
+      const instance = await FreeMoney.new(10000, 10000);
       const errorMsg = 'VM Exception while processing transaction: revert';
 
       try {
@@ -54,7 +54,7 @@ contract('FreeMoney', async function(accounts) {
     });
 
     it('fails to transfer insufficient funds', async function() {
-      const instance = await FreeMoney.new(10000);
+      const instance = await FreeMoney.new(10000, 10000);
       const errorMsg = 'VM Exception while processing transaction: revert';
 
       try {
@@ -65,23 +65,8 @@ contract('FreeMoney', async function(accounts) {
       }
     });
 
-    it('fails to transfer overflow', async function() {
-      const instance = await FreeMoney.new(numberToBn(2).pow(numberToBn(256)).sub(numberToBn(1)));
-      const errorMsg = 'VM Exception while processing transaction: revert';
-
-      // Put some tokens in the second account
-      await instance.mint(10000, { from: accounts[1], value: web3.utils.toWei('0.01', 'ether') });
-
-      try {
-        await instance.transfer(accounts[0], provider.utils.toWei('10000', 'ether'), { from: accounts[1] });
-        assert.fail('Wallet balance overflowed');
-      } catch (e) {
-        assert.equal(e.message, errorMsg);
-      }
-    });
-
     it('transfers to a new token holder', async function() {
-      const instance = await FreeMoney.new(10000);
+      const instance = await FreeMoney.new(10000, 10000);
       const eventHandler = instance.Transfer();
       const result = await instance.transfer(accounts[1], provider.utils.toWei('1000', 'ether'), { from: accounts[0] });
       const events = eventHandler.get();
@@ -96,7 +81,7 @@ contract('FreeMoney', async function(accounts) {
     });
 
     it('transfers to an existing token holder', async function() {
-      const instance = await FreeMoney.new(10000);
+      const instance = await FreeMoney.new(10000, 10000);
       const eventHandler = instance.Transfer();
 
       // Transfer the base amount
@@ -114,7 +99,7 @@ contract('FreeMoney', async function(accounts) {
     });
 
     it('transfers to another new token holder', async function() {
-      const instance = await FreeMoney.new(10000);
+      const instance = await FreeMoney.new(10000, 10000);
       const eventHandler = instance.Transfer();
 
       // Transfer the base amount
@@ -131,7 +116,7 @@ contract('FreeMoney', async function(accounts) {
     });
 
     it('transfers and empties an address', async function() {
-      const instance = await FreeMoney.new(10000);
+      const instance = await FreeMoney.new(10000, 10000);
       const eventHandler = instance.Transfer();
 
       // Transfer the base amount
@@ -153,7 +138,7 @@ contract('FreeMoney', async function(accounts) {
 
   describe('approve', function() {
     it('approves allowances', async function() {
-      const instance = await FreeMoney.new(10000);
+      const instance = await FreeMoney.new(10000, 10000);
       const eventHandler = instance.Approval();
       const result = await instance.approve(accounts[0], provider.utils.toWei('1000', 'ether'), { from: accounts[1] });
       const events = eventHandler.get();
@@ -169,7 +154,7 @@ contract('FreeMoney', async function(accounts) {
 
   describe('transferFrom', function() {
     it('prevents overspending of allowance', async function() {
-      const instance = await FreeMoney.new(10000);
+      const instance = await FreeMoney.new(10000, 10000);
       const errorMsg = 'VM Exception while processing transaction: revert';
 
       await instance.approve(accounts[0], provider.utils.toWei('1000', 'ether'), { from: accounts[1] });
@@ -183,7 +168,7 @@ contract('FreeMoney', async function(accounts) {
     });
 
     it('spends the allowance', async function() {
-      const instance = await FreeMoney.new(10000);
+      const instance = await FreeMoney.new(10000, 10000);
       const eventHandler = instance.Transfer();
 
       // Approve an account
@@ -204,7 +189,7 @@ contract('FreeMoney', async function(accounts) {
 
   describe('mint', function() {
     it('mints for the owner for free', async function() {
-      const instance = await FreeMoney.new(10000);
+      const instance = await FreeMoney.new(10000, 10000);
 
       assert.equal(provider.utils.fromWei(numberToBn(await instance.balanceOf(accounts[0])), 'ether'), 10000, 'Account #0 balance is not 10000');
 
@@ -215,7 +200,7 @@ contract('FreeMoney', async function(accounts) {
     });
 
     it('mints for donors for a price', async function() {
-      const instance = await FreeMoney.new(10000);
+      const instance = await FreeMoney.new(10000, 10000);
 
       assert.equal(provider.utils.fromWei(numberToBn(await instance.balanceOf(accounts[1])), 'ether'), 0, 'Account #1 balance is not 0');
 
@@ -226,7 +211,7 @@ contract('FreeMoney', async function(accounts) {
     });
 
     it('doesnt mint for stingy donors', async function() {
-      const instance = await FreeMoney.new(10000);
+      const instance = await FreeMoney.new(10000, 10000);
       const errorMsg = 'VM Exception while processing transaction: revert';
 
       assert.equal(provider.utils.fromWei(numberToBn(await instance.balanceOf(accounts[2])), 'ether'), 0, 'Account #2 balance is not 1000');
@@ -242,7 +227,7 @@ contract('FreeMoney', async function(accounts) {
 
   describe('tax', function() {
     it('doesnt let non owners tax', async function() {
-      const instance = await FreeMoney.new(10000);
+      const instance = await FreeMoney.new(10000, 10000);
       const errorMsg = 'VM Exception while processing transaction: revert';
 
       try {
@@ -254,7 +239,7 @@ contract('FreeMoney', async function(accounts) {
     });
 
     it('doesnt let owner tax less than 1%', async function() {
-      const instance = await FreeMoney.new(10000);
+      const instance = await FreeMoney.new(10000, 10000);
       const errorMsg = 'VM Exception while processing transaction: revert';
 
       try {
@@ -266,7 +251,7 @@ contract('FreeMoney', async function(accounts) {
     });
 
     it('doesnt let owner tax more than 10%', async function() {
-      const instance = await FreeMoney.new(10000);
+      const instance = await FreeMoney.new(10000, 10000);
       const errorMsg = 'VM Exception while processing transaction: revert';
 
       try {
@@ -278,8 +263,9 @@ contract('FreeMoney', async function(accounts) {
     });
 
     it('taxes all accounts except the owner', async function() {
-      const instance = await FreeMoney.new(10000);
-      var totalAccounts = accounts.length < 10 ? accounts.length : 10;
+      const instance = await FreeMoney.new(10000, 10000);
+      const eventHandler = instance.Taxed();
+      const totalAccounts = accounts.length < 10 ? accounts.length : 10;
       var i;
 
       // Set preliminary balances
@@ -288,9 +274,13 @@ contract('FreeMoney', async function(accounts) {
         assert.equal(provider.utils.fromWei(numberToBn(await instance.balanceOf(accounts[i])), 'ether'), 1000, 'Account #' + i + ' balance is not 1000');
       }
 
-      // Tax everyone
+      // Tax everyone 1%
       const result = await instance.tax(1000, { from: accounts[0] });
       assert.equal(provider.utils.hexToNumber(result.receipt.status), 1);
+
+      // Check the event
+      const events = eventHandler.get();
+      assert.equal(events[0].args._amount.eq(1000), true);
 
       // Check updated balances
       assert.equal(provider.utils.fromWei(numberToBn(await instance.balanceOf(accounts[0])), 'ether'), 1900);
@@ -300,9 +290,18 @@ contract('FreeMoney', async function(accounts) {
     });
   });
 
+  describe('hashTarget', function() {
+    it('correctly hashes the target and salt', async function() {
+      const instance = await FreeMoney.new(10000, 10000);
+      const targetHash = await instance.hashTarget(accounts[1], 'test');
+
+      assert.equal(targetHash, provider.utils.soliditySha3(accounts[1], 'test'));
+    });
+  });
+
   describe('planHeist', function() {
     it('starts a new heist', async function() {
-      const instance = await FreeMoney.new(10000);
+      const instance = await FreeMoney.new(10000, 10000);
       const NewHeist = instance.NewHeist();
       const JoinedHeist = instance.JoinedHeist();
       const targetHash = provider.utils.sha3(accounts[1], 'test');
@@ -330,7 +329,7 @@ contract('FreeMoney', async function(accounts) {
     });
 
     it('joins an existing heist', async function() {
-      const instance = await FreeMoney.new(10000);
+      const instance = await FreeMoney.new(10000, 10000);
       const NewHeist = instance.NewHeist();
       const JoinedHeist = instance.JoinedHeist();
       const targetHash = provider.utils.sha3(accounts[1], 'test');
@@ -357,7 +356,7 @@ contract('FreeMoney', async function(accounts) {
     });
 
     it('starts a new heist with a bribe', async function() {
-      const instance = await FreeMoney.new(10000);
+      const instance = await FreeMoney.new(10000, 10000);
       const NewHeist = instance.NewHeist();
       const JoinedHeist = instance.JoinedHeist();
       const targetHash = provider.utils.sha3(accounts[1], 'test');
@@ -377,7 +376,7 @@ contract('FreeMoney', async function(accounts) {
     });
 
     it('adds a bribe to an existing heist', async function() {
-      const instance = await FreeMoney.new(10000);
+      const instance = await FreeMoney.new(10000, 10000);
       const NewHeist = instance.NewHeist();
       const JoinedHeist = instance.JoinedHeist();
       const targetHash = provider.utils.sha3(accounts[1], 'test');
@@ -399,35 +398,65 @@ contract('FreeMoney', async function(accounts) {
       assert.equal(heist[3], provider.utils.toWei('1', 'ether'));
       assert.equal(heist[4], false);
     });
-  });
 
-  describe('hashTarget', function() {
-    it('correctly hashes the target and salt', async function() {
-      const instance = await FreeMoney.new(10000);
-      const targetHash = await instance.hashTarget(accounts[1], 'test');
+    it('adds a bribe to an existing heist', async function() {
+      const instance = await FreeMoney.new(10000, 10000);
+      const targetHash = provider.utils.sha3(accounts[1], 'test');
+      const errorMsg = 'VM Exception while processing transaction: revert';
 
-      assert.equal(targetHash, provider.utils.soliditySha3(accounts[1], 'test'));
+      // Put some tokens in the target and instigator accounts, start the heist, and move the time forward
+      await instance.transfer(accounts[1], provider.utils.toWei('2000', 'ether'), { from: accounts[0] });
+
+      // Start the heist
+      await instance.planHeist(targetHash, { from: accounts[2] });
+
+      // Add the maximum conspirators (10)
+      await instance.planHeist(targetHash, { from: accounts[3] });
+      await instance.planHeist(targetHash, { from: accounts[4] });
+      await instance.planHeist(targetHash, { from: accounts[5] });
+      await instance.planHeist(targetHash, { from: accounts[6] });
+      await instance.planHeist(targetHash, { from: accounts[7] });
+      await instance.planHeist(targetHash, { from: accounts[8] });
+      await instance.planHeist(targetHash, { from: accounts[9] });
+      await instance.planHeist(targetHash, { from: accounts[10] });
+      await instance.planHeist(targetHash, { from: accounts[11] });
+      await instance.planHeist(targetHash, { from: accounts[12] });
+
+      // Check if heist can be initiated before the deadline
+      try {
+        await instance.planHeist(targetHash, { from: accounts[13] });
+        assert.fail('Added too many conspirators');
+      } catch (e) {
+        assert.equal(e.message, errorMsg);
+      }
     });
   });
 
   describe('initiateHeist', function() {
-    it('initiates a heist', async function() {
+    it('initiates a heist on an uninsured account', async function() {
       // The initiateHeist method calls internal getHeistOutcome, which uses
       // block.timestamp and block.difficulty to generate a pseudo-random
       // number. Since we have no control over the outcome of the heist, we
       // can retry it a number of times in the hope it succeeds.
       this.retries(5);
 
-      const instance = await FreeMoney.new(10000);
+      const instance = await FreeMoney.new(10000, 10000);
       const eventHandler = instance.Robbed();
       const targetHash = await instance.hashTarget(accounts[1], 'test');
 
-      // Put some tokens in the target account, start the heist, and move the time forward
+      // Put some tokens in the target and instigator accounts, start the heist, and move the time forward
       await instance.transfer(accounts[1], provider.utils.toWei('2000', 'ether'), { from: accounts[0] });
-      await instance.planHeist(targetHash, { from: accounts[2], value: provider.utils.toWei('0.01', 'ether') });
+      await instance.transfer(accounts[2], provider.utils.toWei('2000', 'ether'), { from: accounts[0] });
+      await instance.planHeist(targetHash, { from: accounts[2], value: provider.utils.toWei('10', 'ether') });
       await instance.planHeist(targetHash, { from: accounts[3] });
       await instance.planHeist(targetHash, { from: accounts[4] });
       await instance.planHeist(targetHash, { from: accounts[5] });
+      await instance.planHeist(targetHash, { from: accounts[6] });
+      await instance.planHeist(targetHash, { from: accounts[7] });
+      await instance.planHeist(targetHash, { from: accounts[8] });
+      await instance.planHeist(targetHash, { from: accounts[9] });
+      await instance.planHeist(targetHash, { from: accounts[10] });
+      await instance.planHeist(targetHash, { from: accounts[11] });
       await increaseTime(86410); // 1 day, 10 seconds
 
       // Initiate the heist
@@ -440,10 +469,85 @@ contract('FreeMoney', async function(accounts) {
       assert.equal(events[0].args._instigator, accounts[2]);
       assert.equal(events[0].args._target, accounts[1]);
       assert.equal(events[0].args._value.gt(0), true);
+
+      // Check the owners balances has gone up
+      var balance = await instance.balanceOf(accounts[0]);
+      assert.equal(balance.gt(provider.utils.fromWei('8000', 'ether')), true);
+
+      // Check the instigators balances has gone up
+      var balance = await instance.balanceOf(accounts[2]);
+      assert.equal(balance.gt(provider.utils.fromWei('1990', 'ether')), true);
+
+      // Check that the first conspirators balance has gone up
+      balance = await instance.balanceOf(accounts[3]);
+      assert.equal(balance.gt(provider.utils.fromWei('0', 'ether')), true);
+
+      // Check the targets balance has gone down
+      balance = await instance.balanceOf(accounts[1]);
+      assert.equal(balance.lt(provider.utils.toWei('2000', 'ether')), true);
+    });
+
+    it('initiates a heist on an insured account', async function() {
+      // The initiateHeist method calls internal getHeistOutcome, which uses
+      // block.timestamp and block.difficulty to generate a pseudo-random
+      // number. Since we have no control over the outcome of the heist, we
+      // can retry it a number of times in the hope it succeeds.
+      this.retries(5);
+
+      const instance = await FreeMoney.new(10000, 10000);
+      const eventHandler = instance.Robbed();
+      const targetHash = await instance.hashTarget(accounts[1], 'test');
+
+      // Put some tokens in the target and instigator accounts, start the heist, and move the time forward
+      await instance.transfer(accounts[1], provider.utils.toWei('2000', 'ether'), { from: accounts[0] });
+      await instance.transfer(accounts[2], provider.utils.toWei('2000', 'ether'), { from: accounts[0] });
+      await instance.planHeist(targetHash, { from: accounts[2], value: provider.utils.toWei('10', 'ether') });
+      await instance.planHeist(targetHash, { from: accounts[3] });
+      await instance.planHeist(targetHash, { from: accounts[4] });
+      await instance.planHeist(targetHash, { from: accounts[5] });
+      await instance.planHeist(targetHash, { from: accounts[6] });
+      await instance.planHeist(targetHash, { from: accounts[7] });
+      await instance.planHeist(targetHash, { from: accounts[8] });
+      await instance.planHeist(targetHash, { from: accounts[9] });
+      await instance.planHeist(targetHash, { from: accounts[10] });
+      await instance.planHeist(targetHash, { from: accounts[11] });
+
+      // Move the clock forward
+      await increaseTime(86410); // 1 day, 10 seconds
+
+      // Buy insurance
+      await instance.buyInsurance(1, { from: accounts[1] });
+
+      // Initiate the heist
+      const result = await instance.initiateHeist(accounts[1], 'test', { from: accounts[2] });
+      assert.equal(provider.utils.hexToNumber(result.receipt.status), 1);
+
+      // Test the Robbed event
+      const events = eventHandler.get();
+      assert.equal(events.length, 1);
+      assert.equal(events[0].args._instigator, accounts[2]);
+      assert.equal(events[0].args._target, accounts[1]);
+      assert.equal(events[0].args._value.gt(0), true);
+
+      // Check the owners balances has gone up
+      var balance = await instance.balanceOf(accounts[0]);
+      assert.equal(balance.gt(provider.utils.fromWei('8000', 'ether')), true);
+
+      // Check the instigators balances has gone up
+      var balance = await instance.balanceOf(accounts[2]);
+      assert.equal(balance.gt(provider.utils.fromWei('1990', 'ether')), true);
+
+      // Check that the first conspirators balance has gone up
+      balance = await instance.balanceOf(accounts[3]);
+      assert.equal(balance.gt(provider.utils.fromWei('0', 'ether')), true);
+
+      // Targets balance should be the same
+      balance = await instance.balanceOf(accounts[1]);
+      assert.equal(balance.eq(provider.utils.toWei('2000', 'ether')), true);
     });
 
     it('prevents initiating before the deadline', async function() {
-      const instance = await FreeMoney.new(10000);
+      const instance = await FreeMoney.new(10000, 10000);
       const targetHash = await instance.hashTarget(accounts[1], 'test');
       const errorMsg = 'VM Exception while processing transaction: revert';
 
@@ -462,7 +566,7 @@ contract('FreeMoney', async function(accounts) {
     });
 
     it('prevents non-instigator from initiating the heist', async function() {
-      const instance = await FreeMoney.new(10000);
+      const instance = await FreeMoney.new(10000, 10000);
       const targetHash = await instance.hashTarget(accounts[1], 'test');
       const errorMsg = 'VM Exception while processing transaction: revert';
 
@@ -481,7 +585,7 @@ contract('FreeMoney', async function(accounts) {
     });
 
     it('prevents initiating the heist more than once', async function() {
-      const instance = await FreeMoney.new(10000);
+      const instance = await FreeMoney.new(10000, 10000);
       const eventHandler = instance.Robbed();
       const targetHash = await instance.hashTarget(accounts[1], 'test');
       const errorMsg = 'VM Exception while processing transaction: revert';
@@ -495,13 +599,6 @@ contract('FreeMoney', async function(accounts) {
       var result = await instance.initiateHeist(accounts[1], 'test', { from: accounts[2] });
       assert.equal(provider.utils.hexToNumber(result.receipt.status), 1);
 
-      // Test the Robbed event
-      const events = eventHandler.get();
-      assert.equal(events.length, 1);
-      assert.equal(events[0].args._instigator, accounts[2]);
-      assert.equal(events[0].args._target, accounts[1]);
-      assert.equal(events[0].args._value.gt(0), true);
-
       // Check if we can initiate the heist again
       try {
         await instance.initiateHeist(accounts[1], 'test', { from: accounts[2] });
@@ -512,7 +609,7 @@ contract('FreeMoney', async function(accounts) {
     });
 
     it('prevents initiating after the initiation deadline', async function() {
-      const instance = await FreeMoney.new(10000);
+      const instance = await FreeMoney.new(10000, 10000);
       const targetHash = await instance.hashTarget(accounts[1], 'test');
       const errorMsg = 'VM Exception while processing transaction: revert';
 
@@ -531,7 +628,7 @@ contract('FreeMoney', async function(accounts) {
     });
 
     it('prevents initiating a heist if the target address is poor', async function() {
-      const instance = await FreeMoney.new(10000);
+      const instance = await FreeMoney.new(10000, 10000);
       const eventHandler = instance.Robbed();
       const targetHash = await instance.hashTarget(accounts[1], 'test');
 
@@ -551,7 +648,7 @@ contract('FreeMoney', async function(accounts) {
 
   describe('getHeistOdds', function() {
     it('no bribe or conspirators', async function() {
-      const instance = await FreeMoney.new(10000);
+      const instance = await FreeMoney.new(10000, 10000);
       const targetHash = await instance.hashTarget(accounts[1], 'test');
 
       // Initiate a heist
@@ -563,7 +660,7 @@ contract('FreeMoney', async function(accounts) {
     });
 
     it('no bribe, 1 conspirator', async function() {
-      const instance = await FreeMoney.new(10000);
+      const instance = await FreeMoney.new(10000, 10000);
       const targetHash = await instance.hashTarget(accounts[1], 'test');
 
       // Initiate a heist
@@ -576,7 +673,7 @@ contract('FreeMoney', async function(accounts) {
     });
 
     it('+1 ether bribe, no conspirator', async function() {
-      const instance = await FreeMoney.new(10000);
+      const instance = await FreeMoney.new(10000, 10000);
       const targetHash = await instance.hashTarget(accounts[1], 'test');
 
       // Initiate a heist
@@ -588,7 +685,7 @@ contract('FreeMoney', async function(accounts) {
     });
 
     it('+100 finney bribe, no conspirator', async function() {
-      const instance = await FreeMoney.new(10000);
+      const instance = await FreeMoney.new(10000, 10000);
       const targetHash = await instance.hashTarget(accounts[1], 'test');
 
       // Initiate a heist
@@ -600,7 +697,7 @@ contract('FreeMoney', async function(accounts) {
     });
 
     it('+10 finney bribe, no conspirator', async function() {
-      const instance = await FreeMoney.new(10000);
+      const instance = await FreeMoney.new(10000, 10000);
       const targetHash = await instance.hashTarget(accounts[1], 'test');
 
       // Initiate a heist
@@ -612,7 +709,7 @@ contract('FreeMoney', async function(accounts) {
     });
 
     it('+1 finney bribe, no conspirator', async function() {
-      const instance = await FreeMoney.new(10000);
+      const instance = await FreeMoney.new(10000, 10000);
       const targetHash = await instance.hashTarget(accounts[1], 'test');
 
       // Initiate a heist
@@ -626,19 +723,19 @@ contract('FreeMoney', async function(accounts) {
 
   describe('isInsured', function() {
     it('returns false if there is no insurance policy', async function() {
-      const instance = await FreeMoney.new(10000);
+      const instance = await FreeMoney.new(10000, 10000);
       assert.equal(await instance.isInsured(accounts[1]), false);
     });
 
     it('returns true if there is an insurance policy', async function() {
-      const instance = await FreeMoney.new(10000);
+      const instance = await FreeMoney.new(10000, 10000);
       const result = await instance.buyInsurance(1, { from: accounts[1] });
       assert.equal(provider.utils.hexToNumber(result.receipt.status), 1);
       assert.equal(await instance.isInsured(accounts[1]), true);
     });
 
     it('returns false if there is an expired insurance policy', async function() {
-      const instance = await FreeMoney.new(10000);
+      const instance = await FreeMoney.new(10000, 10000);
       const result = await instance.buyInsurance(1, { from: accounts[1] });
       assert.equal(provider.utils.hexToNumber(result.receipt.status), 1);
       assert.equal(await instance.isInsured(accounts[1]), true);
@@ -652,7 +749,7 @@ contract('FreeMoney', async function(accounts) {
 
   describe('buyInsurance', function() {
     it('gets 1 day of free insurance', async function() {
-      const instance = await FreeMoney.new(10000);
+      const instance = await FreeMoney.new(10000, 10000);
       const eventHandler = instance.Insured();
 
       // Confirm the starting balance is zero
@@ -681,7 +778,7 @@ contract('FreeMoney', async function(accounts) {
     });
 
     it('buys insurance', async function() {
-      const instance = await FreeMoney.new(10000);
+      const instance = await FreeMoney.new(10000, 10000);
       const eventHandler = instance.Insured();
 
       // Get the free insurance
@@ -717,14 +814,14 @@ contract('FreeMoney', async function(accounts) {
 
       // The insurance fund should have increased
       const fund = await instance.insuranceFund();
-      assert.equal(provider.utils.fromWei(numberToBn(fund), 'ether'), 700);
+      assert.equal(provider.utils.fromWei(numberToBn(fund), 'ether'), 10700);
 
       // Now we have insurance
       assert.equal(await instance.isInsured(accounts[1]), true);
     });
 
     it('prevents selling to the poor', async function() {
-      const instance = await FreeMoney.new(10000);
+      const instance = await FreeMoney.new(10000, 10000);
       const errorMsg = 'VM Exception while processing transaction: revert';
 
       // Get the free insurance
@@ -745,7 +842,7 @@ contract('FreeMoney', async function(accounts) {
     });
 
     it('prevents extending existing policies', async function() {
-      const instance = await FreeMoney.new(10000);
+      const instance = await FreeMoney.new(10000, 10000);
       const errorMsg = 'VM Exception while processing transaction: revert';
 
       // Get the free insurance
@@ -762,7 +859,7 @@ contract('FreeMoney', async function(accounts) {
     });
 
     it('prevents buying insurance for less than 1 day or more than 7', async function() {
-      const instance = await FreeMoney.new(10000);
+      const instance = await FreeMoney.new(10000, 10000);
       const errorMsg = 'VM Exception while processing transaction: revert';
 
       // Cant buy for less than 1 day

@@ -2,7 +2,16 @@
   "name": "freemoney",
   "version": "0.1.0",
   "scripts": {
-  	"test": "truffle test",
-  	"cover": "./node_modules/.bin/solidity-coverage"
+    "test": "truffle test --network development",
+    "cover": "./node_modules/.bin/solidity-coverage"
+  },
+  "dependencies": {
+    "bignumber": "^1.1.0",
+    "number-to-bn": "^1.7.0",
+    "solc": "^0.4.23",
+    "solidity-coverage": "^0.5.0",
+    "truffle": "^4.1.8",
+    "web3": "^1.0.0-beta.34",
+    "zeppelin-solidity": "^1.9.0"
   }
 }

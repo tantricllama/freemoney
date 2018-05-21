@@ -1,24 +1,18 @@
 # Free Money
 
-ERC20 token with taxing, stealing, and other quirks.
+ERC20 token with stealing. Created as a learning exercise.
 
 ## Minting
 
 Anyone can mint any number of tokens, if they pay a donation in the form of ETH. There is no minimum donation amount.
 
-## Taxation
-
-The contract owner can tax a portion of every token holders balance. The portion is a percentage between **1-10%**. There is no protection against taxation.
-
 ## Heists
 
-Heists are a way of increasing your tokens. Any address may instigate a heist by hashing  the target address with a salt using the *hashTarget* method. Calling the *planHeist* method with the target hash will start a **24 hour** timer to give other addresses the chance to join the heist as conspirators. Addresses may also purchase insurance to protect against loss.
+Heists are a way of increasing your tokens. A heist is instigated by using the *hashTarget* function and passing the result to the *newHeist* function. This will start a **24 hour** timer to give **up to 10** others the chance to join the heist using the *joinHeist* function.
 
-After the **24 hours** are over, the instigator has **12 hours** to initiate the heist and rob the account. The heist will either succeed or fail. If the heist succeeds, then a portion of the targets tokens are transferred to the owner, instigator, and a small fund for the conspirators to claim. Unclaimed tokens are burnt after **12 hours**.
+After the **24 hours** are over, the instigator has **12 hours** to rob the target account. The heist will either succeed or fail. If the heist succeeds, then a portion (between 10% and 40%) of the targets tokens are transferred to the instigator, and a smaller fund for the conspirators to claim.
 
-The odds of a heist succeeding are determined using a pseudo-random number generator. The result is compared to an odds variable determined by a number of factors. The odds can be increased by paying a bribe to the owner in ETH when calling the *planHeist* method, or by having conspirators. Conspirators may also bribe the owner.
-
-Following through and initiating a heist could become unfeasible with too many conspirators. Since the target address is hidden, all token holders are incentivized to join heists.
+The odds of a heist succeeding are determined using a pseudo-random number generator. The result is compared to an odds variable determined by a number of factors. The odds can be increased by paying a bribe to the owner in ETH when calling the *newHeist* function, or by having conspirators. Conspirators may also bribe the owner.
 
 ## Insurance
 
@@ -28,9 +22,9 @@ When a token holder with insurance is robbed, they are penalized by having the c
 
 ## Future Expansions
 
+* Charge tokens to start/join heists
+* Lower bribe amounts
 * Change the minting process:
   * Automated hourly drops of tokens
   * A random number of tokens can be claimed
   * Unclaimed tokens are burned
-* Tax thresholds:
-  * Tax the largest 5% of token holders

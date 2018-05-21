@@ -18,24 +18,24 @@ contract FreeMoney is Ownable {
     event Transfer(address indexed _from, address indexed _to, uint256 _value);
     event Approval(address indexed _owner, address indexed _spender, uint256 _value);
 
-    /// @notice Token holder tracking for tax purposes
-    address[] public tokenHolders;
-    event Taxed(uint256 _amount);
-
     /// @notice Heists can be instigated by any token holder
     struct Heist {
         address instigator;
+        address target;
         address[] conspirators;
-        uint256 deadline;
-        uint256 initiateDeadline;
+        address[] claims;
+        uint256 start;
         uint256 bribe;
-        bool initiated;
+        uint256 amount;
     }
     uint256 maxConspirators = 10;
+    uint256 heistDeadline = 24 hours;
+    uint256 heistInitationDeadline = 36 hours;
     mapping (bytes32 => Heist) public heists;
     event NewHeist(address indexed _instigator, uint256 _deadline);
     event JoinedHeist(address indexed _conspirator);
     event Robbed(address indexed _target, address indexed _instigator, uint256 _value);
+    event RobberyFailed(address indexed _target, address indexed _instigator, string _reason);
 
     /// @notice Insurance protects against loss from heists
     struct InsurancePolicy {
@@ -48,6 +48,12 @@ contract FreeMoney is Ownable {
     uint256 public insuranceMultiplier = 2;
     mapping (address => InsurancePolicy) public insurancePolicies;
     event Insured(address indexed _policyHolder, uint256 _expiry, uint8 _type);
+
+    modifier validDestination(address _to) {
+        require(_to != address(0x0));
+        require(_to != address(this));
+        _;
+    }
 
     /// @notice Instantiates the contract and gives the initial tokens to the sender
     /// @param _initialSupply Number of initial tokens
@@ -63,26 +69,10 @@ contract FreeMoney is Ownable {
     /// @param _to Receiving address
     /// @param _value Number tokens to send
     function _transfer(address _from, address _to, uint256 _value) internal returns (bool) {
-        require(_to != 0x0); // To address cannot be 0
         require(balanceOf[_from] >= _value);
-
-        // Check if the recipient is a token holder already
-        if (balanceOf[_to] == 0) {
-            tokenHolders.push(_to);
-        }
 
         balanceOf[_from] = balanceOf[_from].sub(_value);
         balanceOf[_to] = balanceOf[_to].add(_value);
-
-        // Remove the sender from the token holders list
-        if (balanceOf[_from] == 0 && _from != owner) {
-            for (uint256 i = 0; i < tokenHolders.length; i++) {
-                if (tokenHolders[i] == _from) {
-                    delete tokenHolders[i];
-                    break;
-                }
-            }
-        }
 
         emit Transfer(_from, _to, _value);
 
@@ -93,7 +83,7 @@ contract FreeMoney is Ownable {
     /// @param _to Receiving address
     /// @param _value Number tokens to send
     /// @return true If the tranfer succeeds
-    function transfer(address _to, uint256 _value) public returns (bool) {
+    function transfer(address _to, uint256 _value) public validDestination(_to) returns (bool) {
         return _transfer(msg.sender, _to, _value);
     }
 
@@ -102,7 +92,7 @@ contract FreeMoney is Ownable {
     /// @param _to Receiving address
     /// @param _value Number tokens to send
     /// @return true If the tranfer succeeds
-    function transferFrom(address _from, address _to, uint256 _value) public returns (bool) {
+    function transferFrom(address _from, address _to, uint256 _value) public validDestination(_to) returns (bool) {
         require(_value <= allowance[_from][msg.sender]);
 
         allowance[_from][msg.sender] = allowance[_from][msg.sender].sub(_value);
@@ -115,9 +105,26 @@ contract FreeMoney is Ownable {
     /// @param _value Number tokens the spender can send
     /// @return true If the approval succeeds
     function approve(address _spender, uint256 _value) public returns (bool) {
+        // To change the approve amount you first have to reduce the addresses`
+        //  allowance to zero by calling `approve(_spender,0)` if it is not
+        //  already 0 to mitigate the race condition described here:
+        //  https://github.com/ethereum/EIPs/issues/20#issuecomment-263524729
+        require((_value == 0) || (allowance[msg.sender][_spender] == 0));
+
         allowance[msg.sender][_spender] = _value;
 
         emit Approval(msg.sender, _spender, _value);
+
+        return true;
+    }
+
+    /// @notice Sends ETH from the contract to the owner.
+    /// @param _amount Amount of ETH to send
+    /// @return true Once the ETH has been sent
+    function withdraw(uint _amount) public onlyOwner returns (bool) {
+        require(_amount <= address(this).balance);
+
+        owner.transfer(_amount);
 
         return true;
     }
@@ -135,65 +142,53 @@ contract FreeMoney is Ownable {
         emit Transfer(0, owner, _value);
 
         if (msg.sender != owner) {
-            tokenHolders.push(msg.sender);
-
             emit Transfer(owner, msg.sender, _value);
         }
-    }
-
-    /// @notice Taxes each token holder and transfers the tokens to the owner
-    /// @dev This method will likely have a high gas cost
-    /// @param _amount The amount to tax, range is 1-10%
-    function tax(uint256 _amount) public onlyOwner {
-        // Tax amount must be between 1% and 10%
-        require(_amount >= 100 && _amount <= 1000);
-
-        for (uint256 i = 0; i < tokenHolders.length; i++) {
-            _transfer(tokenHolders[i], owner, (balanceOf[tokenHolders[i]].div(10000).mul(_amount)));
-        }
-
-        emit Taxed(_amount);
     }
 
     /// @dev Hash the target address for a heist
     /// @param _target The target address for a heist
     /// @param _salt A random value to ensure secrecy of the target
     /// @return The hash of the target address
-    function hashTarget(address _target, string _salt) pure public returns (bytes32) {
+    function hashTarget(address _target, string _salt) public pure returns (bytes32) {
         return keccak256(_target, _salt);
     }
 
-    /// @notice Starts a heist or joins an existing heist
+    /// @notice Starts a heist
     /// @param _targetHash A hashed target, created by the hashTarget function
-    function planHeist(bytes32 _targetHash) public payable {
+    function newHeist(bytes32 _targetHash) public payable {
         Heist storage heist = heists[_targetHash];
 
-        if (heist.instigator == 0) {
-            // New heist, set the 24 hour deadline
-            heist.instigator = msg.sender;
-            heist.deadline = now.add(24 hours);
-            heist.initiateDeadline = now.add(36 hours);
+        require(heist.instigator == 0);
 
+        heist.instigator = msg.sender;
+        heist.start = now;
+
+        if (msg.value > 0) {
             heist.bribe = msg.value;
-            heist.initiated = false;
-
-            emit NewHeist(msg.sender, heist.deadline);
-        } else {
-            heist.bribe = heist.bribe.add(msg.value);
-
-            // Existing heist, add the sender to the conspirators
-            if (heist.instigator != msg.sender) {
-                require(heist.conspirators.length < maxConspirators);
-
-                heist.conspirators.push(msg.sender);
-
-                emit JoinedHeist(msg.sender);
-            }
         }
 
-        // Bribes are always helpful
+        emit NewHeist(msg.sender, now + heistDeadline);
+
+    }
+
+    /// @notice Joins an existing heist
+    /// @param _targetHash A hashed target, created by the hashTarget function
+    function joinHeist(bytes32 _targetHash) public payable {
+        Heist storage heist = heists[_targetHash];
+
+        require(heist.instigator != 0);
+
+        if (heist.instigator != msg.sender) {
+            require(heist.conspirators.length < maxConspirators);
+
+            heist.conspirators.push(msg.sender);
+
+            emit JoinedHeist(msg.sender);
+        }
+
         if (msg.value > 0) {
-            owner.transfer(msg.value);
+            heist.bribe = heist.bribe.add(msg.value);
         }
     }
 
@@ -201,67 +196,79 @@ contract FreeMoney is Ownable {
     /// @dev This is called by the instigator between the deadline and initiateDeadline
     /// @param _target The target address for a heist
     /// @param _salt A random value to ensure secrecy of the target
-    function initiateHeist(address _target, string _salt) public {
+    function robTarget(address _target, string _salt) public {
         Heist storage heist = heists[hashTarget(_target, _salt)];
 
         // Prevent double dipping!
-        require(!heist.initiated);
+        require(heist.target == 0);
 
         // Within the allowed timeframe
-        require(now >= heist.deadline);
-        require(now <= heist.initiateDeadline);
+        require(now >= heist.start + heistDeadline);
+        require(now <= heist.start + heistInitationDeadline);
 
         // Only the instigator can initiate the heist
         require(heist.instigator == msg.sender);
 
-        heist.initiated = true;
+        // Reveal the target
+        heist.target = _target;
 
         // Target should have at least 5% of the available coins
         uint256 threshold = totalSupply.sub(balanceOf[owner]).div(100).mul(5);
 
-        /// @dev If threshold is zero, and balance is greater than or
-        // equal to threshold then empty accounts could be robbed
+        if (balanceOf[_target] > threshold) {
+            if (_getHeistOutcome(_target, _salt)) {
+                uint256 hashInt = uint256(keccak256(block.timestamp, block.difficulty, msg.sender, _target, _salt)) % 4;
+                uint256 percentage = hashInt.add(1).mul(10); // 10-40%
+                uint256 amount = balanceOf[_target].div(100).mul(percentage);
 
-        if (getHeistOutcome(_target, _salt) && balanceOf[_target] > threshold) {
-            bytes32 hash = keccak256(block.timestamp, block.difficulty, msg.sender, _target, _salt);
-            uint256 percentage = (uint256(hash) % 4).add(1).mul(10);
-            uint256 amount = balanceOf[_target].div(100).mul(percentage);
-            uint256 originalBalance = balanceOf[_target];
+                heist.amount = amount.sub(amount % 100); // make it divisible by 100
 
-            payoutHeist(heist, _target, amount);
+                balanceOf[_target] = balanceOf[_target].sub(heist.amount);
 
-            emit Robbed(_target, msg.sender, amount);
-
-            if (isInsured(_target)) {
-                uint256 claimAmount = originalBalance.sub(balanceOf[_target]);
-
-                balanceOf[_target] = balanceOf[_target].add(claimAmount);
-                insuranceFund = insuranceFund.sub(claimAmount);
+                emit Robbed(_target, msg.sender, amount);
+            } else {
+                emit RobberyFailed(_target, msg.sender, 'Odds');
             }
+        } else {
+            emit RobberyFailed(_target, msg.sender, 'Balance');
         }
     }
 
-    /// @notice Transfers heisted tokens to those involved in the heist
-    /// @param _heist An initiated heist
-    /// @param _target The target address for a heist
-    /// @param _amount The percentage portion of the targets tokens to steal
-    function payoutHeist(Heist _heist, address _target, uint256 _amount) internal {
-        uint256 toOwner = _amount.div(100); // 1%
-        uint256 toInstigator = _amount.div(100).mul(80); // 80%
-        uint256 remainder = _amount.sub(toOwner.add(toInstigator));
+    /// @notice Transfers a portion of the heist funds to the instigator or conspirator, depending on who calls the function
+    /// @param _targetHash A hashed target, created by the hashTarget function
+    function claimHeistFunds(bytes32 _targetHash) public {
+        Heist storage heist = heists[_targetHash];
 
-        _transfer(_target, owner, toOwner);
+        require(heist.amount > 0);
 
-        // Give each of the conspirators 10% of the remainder
-        uint256 share;
-        for (uint256 i = 0; i < _heist.conspirators.length; i++) {
-            share = remainder.div(100).mul(10);
-            remainder -= share;
+        uint256 i;
 
-            _transfer(_target, _heist.conspirators[i], share);
+        for (i = 0; i < heist.claims.length; i++) {
+            require(heist.claims[i] != msg.sender);
         }
 
-        _transfer(_target, msg.sender, toInstigator.add(remainder));
+        uint256 share;
+
+        if (heist.instigator == msg.sender) {
+            share = 70 + (3 * (maxConspirators - heist.conspirators.length));
+        } else {
+            bool found = false;
+
+            for (i = 0; i < heist.conspirators.length; i++) {
+                if (heist.conspirators[i] == msg.sender) {
+                    found = true;
+                    break;
+                }
+            }
+
+            require(found);
+
+            share = 3;
+        }
+
+        heist.claims.push(msg.sender);
+
+        _transfer(heist.target, msg.sender, heist.amount.div(100).mul(share));
     }
 
     /// @notice Use a pseudo-random number to determine if the heist succeeds
@@ -269,7 +276,7 @@ contract FreeMoney is Ownable {
     /// @param _target The target address for a heist
     /// @param _salt A random value to ensure secrecy of the target
     /// @return true If the heist is succeessful
-    function getHeistOutcome(address _target, string _salt) internal view returns (bool) {
+    function _getHeistOutcome(address _target, string _salt) internal view returns (bool) {
         bytes32 targetHash = hashTarget(_target, _salt);
         bytes32 random = keccak256(block.timestamp, block.difficulty, msg.sender, _target, _salt);
 
@@ -306,7 +313,7 @@ contract FreeMoney is Ownable {
         if (heist.conspirators.length == 0) {
             odds = odds.sub(10);
         } else {
-            odds = odds.add(heist.conspirators.length % 10);
+            odds = odds.add(heist.conspirators.length);
         }
 
         return odds;
@@ -325,8 +332,22 @@ contract FreeMoney is Ownable {
         return false;
     }
 
-    /// @notice Buys an insurance policy for an address 
-    /// @dev If the address has never been insured, it gets 1 day free
+    /// @notice Applied a single day of free insurance to an address 
+    function getFreeInsurance() public {
+        InsurancePolicy storage policy = insurancePolicies[msg.sender];
+
+        require(policy.value == 0);
+
+        // If the address has never bought insurance then _days are ignored and the first day is free.
+        policy.expiry = now.add(1 days);
+
+        // Set the price of the next policy
+        policy.value = insuranceCost;
+
+        emit Insured(msg.sender, policy.expiry, 1);
+    }
+
+    /// @notice Buys an insurance policy for an address
     /// @param _days The desired length of the insurance policy in days
     function buyInsurance(uint256 _days) public {
         require(!isInsured(msg.sender));
@@ -334,28 +355,19 @@ contract FreeMoney is Ownable {
 
         InsurancePolicy storage policy = insurancePolicies[msg.sender];
 
-        if (policy.value == 0) {
-            // If the address has never bought insurance then _days are ignored and the first day is free.
-            policy.expiry = now.add(1 days);
+        require(policy.value > 0);
 
-            // Set the price of the next policy
-            policy.value = insuranceCost;
+        uint256 cost = policy.value.mul(_days);
 
-            emit Insured(msg.sender, policy.expiry, 1);
-        } else {
-            // Expired
-            uint256 cost = policy.value.mul(_days);
+        require(balanceOf[msg.sender] >= cost);
 
-            require(balanceOf[msg.sender] >= cost);
+        // Pay into the insurance fund
+        balanceOf[msg.sender] = balanceOf[msg.sender].sub(cost);
+        insuranceFund = insuranceFund.add(cost);
 
-            // Pay into the insurance fund
-            balanceOf[msg.sender] = balanceOf[msg.sender].sub(cost);
-            insuranceFund = insuranceFund.add(cost);
+        // The cost of insurance doubles after each purchase
+        policy.expiry = now.add(_days * 1 days);
 
-            // The cost of insurance doubles after each purchase
-            policy.expiry = now.add(_days * 1 days);
-
-            emit Insured(msg.sender, policy.expiry, 2);
-        }
+        emit Insured(msg.sender, policy.expiry, 2);
     }
 }

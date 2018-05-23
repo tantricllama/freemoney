@@ -362,18 +362,11 @@ web3.eth.getAccounts().then(function(accounts) {
 
     function testMinting() {
       return new Promise(function(resolve, reject) {
-        const amount = web3.utils.toWei('1000', 'ether');
-        const donation = web3.utils.toWei('1', 'ether');
         const results = [];
-        const tests = 2;
+        const tests = 1;
 
-        freeMoney.methods.mint(amount).estimateGas({ from: contractOwner }).then(function(gasAmount) {
-          results.push({ name: 'mint min', gas: gasAmount });
-          if (results.length == tests) resolve(results);
-        });
-
-        freeMoney.methods.mint(amount).estimateGas({ from: accounts[0], value: donation }).then(function(gasAmount) {
-          results.push({ name: 'mint max', gas: gasAmount });
+        freeMoney.methods.claimTokens().estimateGas({ from: accounts[0] }).then(function(gasAmount) {
+          results.push({ name: 'claimTokens', gas: gasAmount });
           if (results.length == tests) resolve(results);
         });
       });

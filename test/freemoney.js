@@ -271,41 +271,109 @@ contract('FreeMoney', async function(accounts) {
     });
   });
 
-  describe('mint', function() {
-    it('mints for the owner for free', async function() {
+  describe('setMintPerDay', function() {
+    it('sets the property', async function() {
       const instance = await FreeMoney.new(10000, 10000);
+      const oldAmount = await instance.mintPerDay();
 
-      assert.equal(provider.utils.fromWei(numberToBn(await instance.balanceOf(accounts[0])), 'ether'), 10000, 'Account #0 balance is not 10000');
+      await instance.setMintPerDay(provider.utils.toWei('1', 'ether'));
 
-      const result = await instance.mint(1000, { from: accounts[0] });
+      const newAmount = await instance.mintPerDay();
 
-      assert.equal(provider.utils.hexToNumber(result.receipt.status), 1, 'Mint transaction failed');
-      assert.equal(provider.utils.fromWei(numberToBn(await instance.balanceOf(accounts[0])), 'ether'), 11000, 'Account #0 balance is now 11000');
+      assert.equal(oldAmount.eq(newAmount), false);
+      assert.equal(newAmount.eq(provider.utils.toWei('1', 'ether')), true);
+    });
+  });
+
+  describe('claimTokens', function() {
+    it('mints up to 100 tokens', async function() {
+      const instance = await FreeMoney.new(10000, 10000);
+      const eventHandler = instance.Transfer();
+      var oldBalance, newBalance, diff, result, events;
+
+      for (var i = 1; i < 11; i++) {
+        // Get the balance
+        oldBalance = await instance.balanceOf(accounts[i]);
+
+        // Claim some tokens
+        result = await instance.claimTokens({ from: accounts[i] });
+        assert.equal(provider.utils.hexToNumber(result.receipt.status), 1);
+
+        // Get the updated balance
+        newBalance = await instance.balanceOf(accounts[i]);
+
+        // Make sure the difference is between 1 and 100
+        diff = newBalance.sub(oldBalance);
+        assert.equal(diff.gte(provider.utils.toWei('1', 'ether')), true);
+        assert.equal(diff.lte(provider.utils.toWei('100', 'ether')), true);
+
+        events = eventHandler.get();
+        assert.equal(events.length, 1);
+        assert.equal(events[0].args._from, instance.address);
+        assert.equal(events[0].args._to, accounts[i]);
+        assert.equal(events[0].args._value.eq(diff), true);
+      }
     });
 
-    it('mints for donors for a price', async function() {
-      const instance = await FreeMoney.new(10000, 10000);
-
-      assert.equal(provider.utils.fromWei(numberToBn(await instance.balanceOf(accounts[1])), 'ether'), 0, 'Account #1 balance is not 0');
-
-      const result = await instance.mint(1000, { from: accounts[1], value: web3.utils.toWei('0.01', 'ether') });
-
-      assert.equal(provider.utils.hexToNumber(result.receipt.status), 1, 'Mint transaction failed');
-      assert.equal(provider.utils.fromWei(numberToBn(await instance.balanceOf(accounts[1])), 'ether'), 1000, 'Account #1 balance is not 1000');
-    });
-
-    it('doesnt mint for stingy donors', async function() {
+    it('prevents minting more than the limit', async function() {
       const instance = await FreeMoney.new(10000, 10000);
       const errorMsg = 'VM Exception while processing transaction: revert';
+      const mintPerDay = provider.utils.toWei('200', 'ether');
 
-      assert.equal(provider.utils.fromWei(numberToBn(await instance.balanceOf(accounts[2])), 'ether'), 0, 'Account #2 balance is not 1000');
+      // Lower the amount of token to mint per day
+      await instance.setMintPerDay(mintPerDay);
 
+      // Check if heist can be started again
       try {
-        await instance.mint(1000, { from: accounts[1] });
-        assert.fail('Tokens minted without donation');
+        var i = 1, oldBalance, newBalance, claimed, diff,
+          total = 0;
+
+        while (true) {
+          oldBalance = await instance.balanceOf(accounts[i]);
+          await instance.claimTokens({ from: accounts[i] });
+          newBalance = await instance.balanceOf(accounts[i]);
+          diff = newBalance.sub(oldBalance);
+          total = diff.add(total);
+
+          if (total.gt(mintPerDay)) {
+            break;
+          }
+
+          i++;
+        }
+
+        assert.fail('Started an existing heist');
       } catch (e) {
         assert.equal(e.message, errorMsg);
       }
+    });
+
+    it('resets the number of minted tokens each day', async function() {
+      const instance = await FreeMoney.new(10000, 10000);
+      const mintPerDay = provider.utils.toWei('200', 'ether');
+
+      // Lower the amount of token to mint per day
+      await instance.setMintPerDay(mintPerDay);
+
+      assert.equal(await instance.mintCount(), 0);
+
+      // Check if heist can be started again
+      try {
+        var i = 1;
+
+        while (true) {
+          await instance.claimTokens({ from: accounts[i++] });
+        }
+      } catch (e) {}
+
+      assert.equal(await instance.mintCount(), mintPerDay);
+
+      // Move the time forward and claim more tokens
+      await increaseTime(86410);
+      await instance.claimTokens({ from: accounts[1] });
+
+      assert.equal((await instance.mintCount()).gt(0), true);
+      assert.equal((await instance.mintCount()).lt(mintPerDay), true);
     });
   });
 

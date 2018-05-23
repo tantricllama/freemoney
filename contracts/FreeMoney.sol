@@ -18,6 +18,10 @@ contract FreeMoney is Ownable {
     event Transfer(address indexed _from, address indexed _to, uint256 _value);
     event Approval(address indexed _owner, address indexed _spender, uint256 _value);
 
+    uint256 public mintStart;
+    uint256 public mintCount = 0;
+    uint256 public mintPerDay = 100000 * (10 ** decimals);
+
     /// @notice Heists can be instigated by any token holder
     struct Heist {
         address instigator;
@@ -62,6 +66,7 @@ contract FreeMoney is Ownable {
         balanceOf[msg.sender] = _initialSupply.mul(10 ** decimals);
         insuranceFund = _insuranceFund.mul(10 ** decimals);
         totalSupply = balanceOf[msg.sender].add(insuranceFund);
+        mintStart = now;
     }
 
     /// @notice Transfers tokens between two addresses
@@ -129,21 +134,33 @@ contract FreeMoney is Ownable {
         return true;
     }
 
-    /// @notice Mints a number of new coins for a donation of ETH
-    /// @dev Free for the owner
-    /// @param _value Number of tokens to mint
-    function mint(uint256 _value) public payable {
-        require(msg.sender == owner || msg.value > 0);
+    /// @notice Sets the maximum amount of tokens to mint each day
+    /// @param _amount The amount of tokens
+    function setMintPerDay(uint256 _amount) public onlyOwner {
+        mintPerDay = _amount;
+    }
 
-        uint256 newAmount = _value.mul(10 ** decimals);
-        balanceOf[msg.sender] = balanceOf[msg.sender].add(newAmount);
-        totalSupply = totalSupply.add(newAmount);
-
-        emit Transfer(0, owner, _value);
-
-        if (msg.sender != owner) {
-            emit Transfer(owner, msg.sender, _value);
+    /// @notice Mints up to 100 tokens for the sender.
+    function claimTokens() public {
+        if (mintStart < now.sub(1 days)) {
+            mintStart = now;
+            mintCount = 0;
         }
+
+        require(mintCount < mintPerDay);
+
+        // 1-100
+        uint256 toMint = (uint256(keccak256(msg.sender, now, mintStart, mintCount)) % 100).add(1).mul(10 ** decimals);
+
+        if (mintCount.add(toMint) > mintPerDay) {
+            toMint = mintPerDay.sub(mintCount);
+        }
+
+        mintCount = mintCount.add(toMint);
+        balanceOf[msg.sender] = balanceOf[msg.sender].add(toMint);
+        totalSupply = totalSupply.add(toMint);
+
+        emit Transfer(address(this), msg.sender, toMint);
     }
 
     /// @dev Hash the target address for a heist
@@ -300,6 +317,7 @@ contract FreeMoney is Ownable {
 
         uint256 odds = 50; // 50% chance of the heist succeeding
 
+        // TODO: Add a function to set these thresholds
         if (heist.bribe > 1 ether) {
             odds = 90;
         } else if (heist.bribe > 100 finney) {

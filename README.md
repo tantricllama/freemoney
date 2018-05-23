@@ -4,7 +4,7 @@ ERC20 token with stealing. Created as a learning exercise.
 
 ## Minting
 
-Anyone can mint any number of tokens, if they pay a donation in the form of ETH. There is no minimum donation amount.
+A number of tokens are minted each day. Anyone can claim a portion of these tokens, up to 100 per request. If not all of the tokens are claims, then not all of the tokens are minted.
 
 ## Heists
 
@@ -23,8 +23,3 @@ When a token holder with insurance is robbed, they are penalized by having the c
 ## Future Expansions
 
 * Charge tokens to start/join heists
-* Lower bribe amounts
-* Change the minting process:
-  * Automated hourly drops of tokens
-  * A random number of tokens can be claimed
-  * Unclaimed tokens are burned
